@@ -1,6 +1,6 @@
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/12.4.0/firebase-app.js';
 import { getAuth, signInAnonymously, signInWithEmailAndPassword, signOut, onAuthStateChanged, updatePassword, reauthenticateWithCredential, EmailAuthProvider } from 'https://www.gstatic.com/firebasejs/12.4.0/firebase-auth.js';
-import { getFirestore, doc, collection, getDoc, setDoc, runTransaction, serverTimestamp, onSnapshot, query, where } from 'https://www.gstatic.com/firebasejs/12.4.0/firebase-firestore.js';
+import { getFirestore, doc, collection, getDoc, getDocFromServer, setDoc, runTransaction, serverTimestamp, onSnapshot, query, where } from 'https://www.gstatic.com/firebasejs/12.4.0/firebase-firestore.js';
 import { firebaseConfig, adminUid } from './firebase-config.js';
 const playerApp = initializeApp(firebaseConfig);
 const hostApp = initializeApp(firebaseConfig, 'administrator');
@@ -75,7 +75,10 @@ export async function saveQuestion(code,number,question) {
 }
 export async function press(code, number) {
   const uid = playerAuth.currentUser.uid;
-  return runTransaction(db, async tx => {
+  // Rules can reject a stale counter before the transaction conflict is retried.
+  // Re-read the server to distinguish contention from an invalid or closed round.
+  for(let attempt=0;attempt<12;attempt++) {
+   try { return await runTransaction(db, async tx => {
     const room = await tx.get(doc(db,'rooms',code));
     const roundRef=doc(db,'rooms',code,'rounds',String(number));
     const round=await tx.get(roundRef);
@@ -89,5 +92,16 @@ export async function press(code, number) {
     tx.set(pressRef,{playerId:uid,name,rank,pressedAt:serverTimestamp()});
     tx.update(roundRef,{count:rank,lastPressId:uid,...(rank===1?{winnerId:uid,winnerName:name,winnerAt:serverTimestamp()}:{})});
     return rank;
-  },{maxAttempts:12});
+   },{maxAttempts:12}); }
+   catch(error) {
+    if(error.code!=='permission-denied' && error.code!=='aborted') throw error;
+    const existing=await getDocFromServer(doc(db,'rooms',code,'rounds',String(number),'presses',uid));
+    if(existing.exists()) return existing.data().rank;
+    const room=await getDocFromServer(doc(db,'rooms',code));
+    const round=await getDocFromServer(doc(db,'rooms',code,'rounds',String(number)));
+    if(!room.exists()||!round.exists()||room.data().currentRound!==number||round.data().state!=='open') throw new Error('Deze ronde is nog niet gestart of al gesloten.');
+    if(attempt===11) throw error;
+    await new Promise(resolve=>setTimeout(resolve,25+Math.random()*Math.min(400,40*(attempt+1))));
+   }
+  }
 }
