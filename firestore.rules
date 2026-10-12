@@ -1,0 +1,84 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() { return request.auth != null; }
+    function admin() { return signedIn() && request.auth.uid == 'ioykgL3ZSSVyejDq8jyTgDQ0Bh33'; }
+    function roomPath(code) { return /databases/$(database)/documents/rooms/$(code); }
+    function roundPath(code, number) { return /databases/$(database)/documents/rooms/$(code)/rounds/$(number); }
+    function memberPath(code, uid) { return /databases/$(database)/documents/rooms/$(code)/members/$(uid); }
+    function pressPath(code, number, uid) { return /databases/$(database)/documents/rooms/$(code)/rounds/$(number)/presses/$(uid); }
+    function member(code) { return signedIn() && exists(memberPath(code, request.auth.uid)); }
+    function owner(code) { return admin() && get(roomPath(code)).data.ownerId == request.auth.uid; }
+    match /rooms/{code} {
+      allow get: if signedIn();
+      allow list: if admin() && resource.data.ownerId == request.auth.uid;
+      allow create: if admin() && code.matches('^[0-9]{6}$')
+        && request.resource.data.keys().hasOnly(['ownerId','title','createdAt','currentRound'])
+        && request.resource.data.ownerId == request.auth.uid
+        && request.resource.data.title == 'Battle Speed Round'
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.currentRound == 1
+        && getAfter(roundPath(code, '1')).data.number == 1;
+      allow update: if owner(code)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['currentRound'])
+        && request.resource.data.currentRound == resource.data.currentRound + 1
+        && getAfter(roundPath(code, string(request.resource.data.currentRound))).data.number == request.resource.data.currentRound;
+      allow delete: if owner(code);
+      match /members/{uid} {
+        allow get: if signedIn() && (request.auth.uid == uid || member(code) || owner(code));
+        allow list: if member(code) || owner(code);
+        allow create: if signedIn() && request.auth.uid == uid && exists(roomPath(code))
+          && request.resource.data.keys().hasOnly(['name','joinedAt'])
+          && request.resource.data.name is string && request.resource.data.name.size() >= 1 && request.resource.data.name.size() <= 24
+          && request.resource.data.joinedAt == request.time;
+        allow delete: if signedIn() && request.auth.uid == uid || owner(code);
+      }
+      match /rounds/{number} {
+        allow read: if member(code) || owner(code);
+        allow create: if admin() && getAfter(roomPath(code)).data.ownerId == request.auth.uid
+          && getAfter(roomPath(code)).data.currentRound == request.resource.data.number
+          && number == string(request.resource.data.number)
+          && request.resource.data.keys().hasOnly(['number','question','state','count','winnerId','winnerName','winnerAt','startedAt','lastPressId'])
+          && request.resource.data.question == ''
+          && request.resource.data.state == 'waiting' && request.resource.data.count == 0
+          && request.resource.data.winnerId == null && request.resource.data.winnerName == null
+          && request.resource.data.winnerAt == null && request.resource.data.startedAt == null && request.resource.data.lastPressId == null;
+        function adminStateChange() {
+          return owner(code) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['state','startedAt','question'])
+            && request.resource.data.question is string && request.resource.data.question.size() <= 600
+            && ((resource.data.state == 'waiting' && request.resource.data.state == 'open' && request.resource.data.startedAt == request.time)
+              || (resource.data.state == 'open' && request.resource.data.state == 'closed' && request.resource.data.startedAt == resource.data.startedAt && request.resource.data.question == resource.data.question)
+              || (resource.data.state == 'waiting' && request.resource.data.state == 'waiting' && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['question'])));
+        }
+        function validPress() {
+          let after = request.resource.data;
+          let press = getAfter(pressPath(code, number, request.auth.uid)).data;
+          return member(code) && resource.data.state == 'open'
+            && getAfter(roomPath(code)).data.currentRound == resource.data.number
+            && after.diff(resource.data).affectedKeys().hasOnly(['count','lastPressId','winnerId','winnerName','winnerAt'])
+            && after.count == resource.data.count + 1 && after.lastPressId == request.auth.uid
+            && !exists(pressPath(code, number, request.auth.uid))
+            && press.rank == after.count && press.playerId == request.auth.uid && press.pressedAt == request.time
+            && ((resource.data.count == 0 && after.winnerId == request.auth.uid && after.winnerName == get(memberPath(code, request.auth.uid)).data.name && after.winnerAt == request.time)
+              || (resource.data.count > 0 && after.winnerId == resource.data.winnerId && after.winnerName == resource.data.winnerName && after.winnerAt == resource.data.winnerAt));
+        }
+        allow update: if adminStateChange() || signedIn() && validPress();
+        allow delete: if owner(code);
+        match /presses/{uid} {
+          allow read: if member(code) || owner(code);
+          allow create: if signedIn() && request.auth.uid == uid && member(code)
+            && get(roundPath(code, number)).data.state == 'open'
+            && getAfter(roomPath(code)).data.currentRound == get(roundPath(code, number)).data.number
+            && request.resource.data.keys().hasOnly(['playerId','name','rank','pressedAt'])
+            && request.resource.data.playerId == uid
+            && request.resource.data.name == get(memberPath(code, uid)).data.name
+            && request.resource.data.pressedAt == request.time
+            && request.resource.data.rank == get(roundPath(code, number)).data.count + 1
+            && getAfter(roundPath(code, number)).data.count == request.resource.data.rank
+            && getAfter(roundPath(code, number)).data.lastPressId == uid;
+          allow delete: if owner(code);
+        }
+      }
+    }
+  }
+}

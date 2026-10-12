@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="nl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#111217">
+  <meta name="description" content="Eén knop. Eén winnaar. Doe mee aan Battle Speed Round en ontdek wie als eerste drukt.">
+  <title>Battle Speed Round</title>
+  <link rel="icon" href="./icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="./styles.css">
+  <script type="module" src="./app.js"></script>
+</head>
+<body>
+  <div class="grain" aria-hidden="true"></div>
+  <header class="header">
+    <a href="./" class="brand" aria-label="Battle Speed Round — start"><span class="brand-mark">↯</span><span>BATTLE SPEED ROUND</span></a>
+    <div class="header-right"><span class="connection" id="connection"><i></i><span>Verbinden</span></span><button class="quiet" id="admin-link">Beheer <span>↗</span></button></div>
+  </header>
+  <main id="app" tabindex="-1"></main>
+  <footer><span>SNELLE HANDEN. SCHERPE REFLEXEN.</span><span id="footer-status">Samen spelen, op je eigen telefoon.</span></footer>
+  <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+  <noscript><p class="noscript">Zet JavaScript aan om Battle Speed Round te gebruiken.</p></noscript>
+</body>
+</html>

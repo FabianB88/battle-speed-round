@@ -1,0 +1,6 @@
+.local/
+node_modules/
+firebase-debug.log*
+.firebase/
+ADMIN-TOEGANG.txt
+*.zip
