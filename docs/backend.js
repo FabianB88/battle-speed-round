@@ -54,15 +54,20 @@ export async function nextRound(code) {
     tx.set(doc(hostDb,'rooms',code,'rounds',String(number)),emptyRound(number));
   });
 }
-export async function setRoundState(code, number, state, question='') {
+export async function setRoundState(code, number, state, question) {
   await runTransaction(hostDb, async tx => {
     const room = await tx.get(doc(hostDb,'rooms',code));
     const ref=doc(hostDb,'rooms',code,'rounds',String(number));
     const round=await tx.get(ref);
+    let publishedQuestion=question;
+    if(state==='open' && publishedQuestion===undefined) {
+      const draft=await tx.get(doc(hostDb,'rooms',code,'drafts',String(number)));
+      publishedQuestion=draft.exists()?draft.data().question:'';
+    }
     if(room.data().currentRound !== number) throw new Error('De ronde is intussen gewijzigd.');
     if(state === 'open' && round.data().state !== 'waiting') throw new Error('Deze ronde is al gestart.');
     if(state === 'closed' && round.data().state !== 'open') throw new Error('Deze ronde is niet geopend.');
-    tx.update(ref, state==='open'?{state,startedAt:serverTimestamp(),question:question.trim()}:{state});
+    tx.update(ref, state==='open'?{state,startedAt:serverTimestamp(),question:publishedQuestion.trim()}:{state});
   });
 }
 export async function saveQuestion(code,number,question) {
@@ -70,7 +75,7 @@ export async function saveQuestion(code,number,question) {
     const ref=doc(hostDb,'rooms',code,'rounds',String(number));
     const round=await tx.get(ref);
     if(round.data().state!=='waiting') throw new Error('Maak een nieuwe ronde om een nieuwe vraag klaar te zetten.');
-    tx.update(ref,{question:question.trim()});
+    tx.set(doc(hostDb,'rooms',code,'drafts',String(number)),{question:question.trim(),updatedAt:serverTimestamp()});
   });
 }
 export async function press(code, number) {

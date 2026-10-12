@@ -24,6 +24,15 @@ service cloud.firestore {
         && request.resource.data.currentRound == resource.data.currentRound + 1
         && getAfter(roundPath(code, string(request.resource.data.currentRound))).data.number == request.resource.data.currentRound;
       allow delete: if owner(code);
+      match /drafts/{number} {
+        allow read, delete: if owner(code);
+        allow create, update: if owner(code)
+          && number == string(get(roomPath(code)).data.currentRound)
+          && get(roundPath(code, number)).data.state == 'waiting'
+          && request.resource.data.keys().hasOnly(['question','updatedAt'])
+          && request.resource.data.question is string && request.resource.data.question.size() <= 600
+          && request.resource.data.updatedAt == request.time;
+      }
       match /members/{uid} {
         allow get: if signedIn() && (request.auth.uid == uid || member(code) || owner(code));
         allow list: if member(code) || owner(code);
@@ -47,8 +56,7 @@ service cloud.firestore {
           return owner(code) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['state','startedAt','question'])
             && request.resource.data.question is string && request.resource.data.question.size() <= 600
             && ((resource.data.state == 'waiting' && request.resource.data.state == 'open' && request.resource.data.startedAt == request.time)
-              || (resource.data.state == 'open' && request.resource.data.state == 'closed' && request.resource.data.startedAt == resource.data.startedAt && request.resource.data.question == resource.data.question)
-              || (resource.data.state == 'waiting' && request.resource.data.state == 'waiting' && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['question'])));
+              || (resource.data.state == 'open' && request.resource.data.state == 'closed' && request.resource.data.startedAt == resource.data.startedAt && request.resource.data.question == resource.data.question));
         }
         function validPress() {
           let after = request.resource.data;
