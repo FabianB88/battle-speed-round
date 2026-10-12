@@ -1,14 +1,38 @@
 import * as B from './backend.js?v=2';
 const app=document.querySelector('#app');
 const s={ready:false,role:'join',code:null,name:'',round:null,members:[],presses:[],off:[],roundOff:[],sent:false,sending:false,rank:null,sound:true,heard:new Set(),questionDraft:null,savedQuestion:'',draftReady:false};
-let audio,toastTimer,alarmNodes=[];
+let audio,toastTimer,alarmNodes=[],alarmMix;
 const esc=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const cleanCode=value=>value.replace(/\D/g,'').slice(0,6);
 function notify(message){const t=document.querySelector('#toast');t.textContent=message;t.hidden=false;clearTimeout(toastTimer);toastTimer=setTimeout(()=>t.hidden=true,4200);}
 function friendly(error){const code=error.code??'';if(/invalid-credential|wrong-password|user-not-found|invalid-email/.test(code))return'E-mail of wachtwoord klopt niet.';if(/network|unavailable/.test(code))return'Geen verbinding. Controleer je internet en probeer opnieuw.';if(/too-many-requests/.test(code))return'Te veel pogingen. Wacht even en probeer opnieuw.';if(/permission-denied/.test(code))return'Je hebt geen toegang tot deze actie. Meld je opnieuw aan.';return error.message||'Dit lukt nu niet. Probeer het opnieuw.';}
 function connection(){const el=document.querySelector('#connection');el.className=`connection ${navigator.onLine&&s.ready?'connected':'offline'}`;el.querySelector('span').textContent=!navigator.onLine?'Offline':s.ready?'Verbonden':'Verbinden';if(s.role==='player')updateBuzzer();}
 async function unlockAudio(){try{audio??=new(window.AudioContext||window.webkitAudioContext)();if(audio.state==='suspended')await audio.resume();}catch{notify('Geluid is niet beschikbaar in deze browser.');}}
-function alarm(winner=false){if(!s.sound||!audio||audio.state!=='running')return;for(const node of alarmNodes){try{node.stop();}catch{}node.disconnect();}alarmNodes=[];const now=audio.currentTime;for(let i=0;i<(winner?3:2);i++){const o=audio.createOscillator(),g=audio.createGain();o.type='square';o.frequency.setValueAtTime(i%2?740:990,now+i*.16);g.gain.setValueAtTime(0,now+i*.16);g.gain.linearRampToValueAtTime(.24,now+i*.16+.01);g.gain.exponentialRampToValueAtTime(.001,now+i*.16+.13);o.connect(g);g.connect(audio.destination);o.start(now+i*.16);o.stop(now+i*.16+.15);alarmNodes.push(o);}document.body.classList.remove('flash');void document.body.offsetWidth;document.body.classList.add('flash');}
+function alarm(winner=false){
+ if(!s.sound||!audio||audio.state!=='running')return;
+ const now=audio.currentTime;
+ if(alarmMix){alarmMix.gain.cancelScheduledValues(now);alarmMix.gain.setTargetAtTime(0,now,.005);}
+ for(const node of alarmNodes){try{node.stop(now+.025);}catch{}}
+ alarmNodes=[];
+ const filter=audio.createBiquadFilter(),mix=audio.createGain(),duration=winner?.50:.36;
+ filter.type='lowpass';filter.Q.value=.7;
+ filter.frequency.setValueAtTime(950,now);filter.frequency.linearRampToValueAtTime(1600,now+.04);
+ filter.frequency.setValueAtTime(1800,now+.26);filter.frequency.linearRampToValueAtTime(1000,now+.26+duration);
+ mix.gain.setValueAtTime(0,now);
+ for(const [offset,length] of [[0,.18],[.26,duration]]){
+  mix.gain.setValueAtTime(0,now+offset);mix.gain.linearRampToValueAtTime(.30,now+offset+.025);
+  mix.gain.setValueAtTime(.30,now+offset+length-.06);mix.gain.linearRampToValueAtTime(0,now+offset+length);
+ }
+ filter.connect(mix);mix.connect(audio.destination);alarmMix=mix;
+ let remaining=3;
+ [220,277.18,329.63].forEach((frequency,i)=>{
+  const horn=audio.createOscillator();horn.type=i===2?'triangle':'sawtooth';horn.detune.value=(i-1)*4;
+  horn.frequency.setValueAtTime(frequency*1.018,now);horn.frequency.linearRampToValueAtTime(frequency,now+.06);
+  horn.connect(filter);horn.onended=()=>{horn.disconnect();if(--remaining===0){filter.disconnect();mix.disconnect();}};
+  horn.start(now);horn.stop(now+.26+duration+.03);alarmNodes.push(horn);
+ });
+ document.body.classList.remove('flash');void document.body.offsetWidth;document.body.classList.add('flash');
+}
 function clearRoom(){s.off.forEach(f=>f());s.roundOff.forEach(f=>f());s.off=[];s.roundOff=[];s.code=null;s.round=null;s.members=[];s.presses=[];s.sent=false;s.sending=false;s.rank=null;s.questionDraft=null;s.savedQuestion='';s.draftReady=false;}
 function entryCode(){return cleanCode(new URL(location.href).searchParams.get('room')||'');}
 function renderJoin(message=''){

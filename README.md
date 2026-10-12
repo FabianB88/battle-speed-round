@@ -10,7 +10,7 @@ Een mobiele quizbuzzer met één grote drukknop, hoorbaar alarm en een live behe
 4. Kies **Start ronde**. Nu verschijnt de vraag op de telefoons en kunnen deelnemers drukken. Alleen de eerste druk per deelnemer telt; volgende drukken spelen het alarm opnieuw af.
 5. De beheerder ziet de winnaar en de volledige volgorde live. **Nieuwe ronde** maakt alle knoppen weer klaar.
 
-Deelnemers horen een alarm na bevestiging van hun eerste druk en bij elke volgende druk. Het beheerscherm geeft een alarm bij de eerste geregistreerde druk. Browsers activeren geluid na een tik; gebruik de geluidsknop als geluid nog niet actief is. Houd de app op de voorgrond tijdens het spelen.
+Deelnemers horen een volle toeter met een korte en een langere stoot na bevestiging van hun eerste druk en bij elke volgende druk. Het beheerscherm toetert bij de eerste geregistreerde druk. Browsers activeren geluid na een tik; gebruik de geluidsknop als geluid nog niet actief is. Houd de app op de voorgrond tijdens het spelen.
 
 ## Data en toegang
 
